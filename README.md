@@ -11,7 +11,7 @@ I progetti trattano tematiche statistiche e applicazioni in ambito sanitario, ec
 
 ### 1. Analisi Statistica del Diabete Mellito
 Tesi triennale basata su un dataset del CDC (BRFSS), focalizzata sull’identificazione dei principali fattori associati all’insorgenza del diabete, mediante modelli di regressione binaria.  
-📄 [Leggi il README](./tesi_triennale/README.md)
+📄 [Leggi il README](./tesi_triennale/)
 
 ---
 
