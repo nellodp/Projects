@@ -1,0 +1,1244 @@
+---
+title: "La Mia Presentazione"
+author: "Il Tuo Nome"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+    ratio: 16:9
+---
+
+
+## Pulizia 
+
+```{r warning=FALSE, include=FALSE}
+library(readxl)
+library(tidyverse)
+library(xaringan)
+
+
+dat <- read_excel("Fuobauxo.xlsx")
+dim(dat)
+
+```
+
+
+Nel dataset, ci sono missing scritti diversamente. 
+In molte osservazioni NA è scritto come 'na' 
+
+```{r}
+
+dat_mod <- as.data.frame(apply(dat, 2, function(col) na_if(col, "na")))
+
+```
+
+
+dat_mod2 è il dataset composto da tutte le variabili con più (o uguale al) del 25 % di missing
+dat_mod3 è il dataset composto da tutte le variabili con meno del 25 % di missing
+
+```{r}
+conteggio_na <- colSums(is.na(dat_mod))
+
+percentuale_na <- conteggio_na /nrow(dat_mod) * 100
+
+variabili_eliminabili <- ifelse(percentuale_na >= 25,1,0)
+#sum(variabili_eliminabili)
+
+dat_mod2 <- dat_mod %>%
+  dplyr::select(all_of(variabili_eliminabili))
+
+#length(dat_mod2)
+
+
+dat_mod3 <- dat_mod %>%
+  select(-c(colnames(dat_mod2)))
+#length(dat_mod3)
+
+length(dat_mod3) + length(dat_mod2) == length(dat_mod) # TRUE
+
+```
+
+Utilizzo dat_mod3
+
+Voglio trasformare tutti gli y (Yes) in 1 e n(No) in 0 presenti nel dataset, perché molte volte 
+questi o sono con la lettera minuscola o maiuscola. 
+
+se è yes = 1, altrimenti 0
+Provo se è tutto ok con la variabile dm (presenza di diabete 1, altrimenti 0)
+
+```{r}
+
+dat_mod3 <- as.data.frame(apply(dat_mod3, 2, function(col) ifelse(col == 'y', 1, col)))
+dat_mod3 <- as.data.frame(apply(dat_mod3, 2, function(col) ifelse(col == 'n', 0, col)))
+
+table(dat_mod3$dm, useNA = 'always')
+
+
+```
+
+
+Per lo stesso motivo codifico la variabile gender 
+se è f = 1, altrimenti 0
+
+```{r}
+
+dat_mod3$gender <- ifelse(dat_mod3$gender == 'f',1,0)
+  
+table(dat_mod3$gender, useNA = 'always')
+
+```
+
+Adesso passo col codificare tutte le variabili numeriche che sono in formato chr
+colonne_da_mantenere sono le variabili che per adesso lascio in formato chr
+
+Prima di cambiare il tipo alle variabili, creo un nuovo dataset per poter tornare in dietro se si è commesso un errore.
+
+```{r}
+
+colonne_da_mantenere <- c('data','birth_date', 'birth_place', 'patient_key', 'problema_eta', 'problema_BMI')
+
+
+dat_mod4 <- dat_mod3 %>%
+  mutate(across(-all_of(colonne_da_mantenere), as.numeric))
+
+#str(dat_mod4)
+
+```
+
+
+Siccome il dataset è composto da molte variabili, attraverso la pipeline cerco di selezionare quelle
+che presentano solo valori 0,1 e NA per codificarle in factor (questo per non eseguirlo manualmente)
+
+```{r}
+
+dat_mod4 <- dat_mod4 %>%
+   mutate(across(where(~all(. %in% c(0, 1, NA))), as.factor))
+
+#str(dat_mod4)
+
+```
+
+
+In accordo con la professoressa elimino le seguenti variabili per due motivi 
+1. sono ridondanti in quanto, per ogni variabile abbiamo la variabile _val che è continua 
+2. alcune sono quantitative ma discrete, altre come basofili sono composte da 3 categorie e non sappiamo cosa significano
+
+
+```{r}
+
+dat_mod4 <- dat_mod4 %>%
+  select(-c(basofili,monociti,linfociti,eosinofili, neutrofili))
+
+#str(dat_mod4)
+```
+
+
+codifico adesso le variabili data e birth_date
+
+```{r}
+
+dat_mod4$data <- as.Date(dat_mod4$data, format = "%Y-%m-%d")
+dat_mod4$birth_date <- as.Date(dat_mod4$birth_date, format = "%Y-%m-%d")
+
+#str(dat_mod4)
+
+```
+
+
+ci siamo resi conto che un'osservazione presenta nella variabile birth_place la data di nascita che dovrebbe andare in 
+birth_date. 
+Abbiamo deciso di eliminare l'osservazione, anche perché ha un missing in peso_2; pertanto, non possiamo creare l'outcome in percentuale (peso-peso2/peso)*100  (?? da attenzionare, potrei anche aggiustare l'osservazione)
+
+
+```{r}
+dat_mod4 %>%
+  select(id,birth_place,peso,peso_2) %>%
+  filter(id == 1824 )
+
+dat_mod5 <- dat_mod4 %>%
+  filter(id != 1824)
+
+```
+
+Creo la variabile outcome 
+
+peso-peso2/peso *100
+
+```{r}
+dat_mod5 <- dat_mod5 %>%
+  mutate(peso_freq = (peso-peso_2)/peso *100)
+
+```
+
+visualizzo
+
+```{r}
+dat_mod5 %>%
+  select(peso,peso_2,peso_freq) %>%
+  head(.)
+```
+
+La rendo binaria
+1 se la perdita di peso è stata superiore al 5%, 0 altrimenti
+
+```{r}
+dat_mod5 <- dat_mod5 %>%
+  mutate(peso_outcome = as.factor(ifelse(peso_freq > 5,1,0)))
+
+```
+
+visualizzo
+
+```{r}
+dat_mod5 %>%
+  select(peso,peso_2,peso_freq,peso_outcome) %>%
+  head(.)
+```
+
+Visualizziamo gli NA ( a causa dei missing in peso_2)
+
+```{r}
+table(dat_mod5$peso_outcome, useNA = 'always')
+```
+
+
+elimino i pesi superflui,poichè ridondanti adesso che abbiamo costruito l'outcome 
+elimino anche altezza_step1 poiché uguale a altezza
+
+```{r}
+dat_mod5 <- dat_mod5 %>%
+  select(-c(peso_1,peso_2,peso_freq,altezza_step1))
+
+```
+
+Siccome il prossimo step è l'imputazione dei valori NA, creo un nuovo dataset in cui rimuovo l'outcome 
+Come deciso con la professoressa, prima procediamo con l'analisi senza imputazione della variabile dipendente, poi procediamo 
+col cofronto. 
+
+Creo dataset con id e peso_outcome per merge (mi serve dopo l'imputazione dei missing)
+
+
+```{r}
+dat_outcome <- dat_mod5 %>%
+  select(id, peso_outcome)
+
+#str(dat_outcome)
+
+```
+
+Creo il dataset senza outcome per imputarlo
+
+```{r}
+dat_withoutOutcome <- dat_mod5 %>%
+  select(- peso_outcome)
+
+```
+
+
+FERMA !!!
+
+procedo con l'imputazione degli NA 
+
+```{r}
+#prova_1 <- mice(dat_withoutOutcome,m = 5, maxit = 50,meth = 'pmm',seed = 500)
+```
+
+Il comando va in errore perchè la matrice delle covariate è singolare, c'è perfetta collinearità tra le variabili 
+Principali cause: 
+1. presenza di NA, non sappiamo se sono  valori mancanti o se c'è una reale motivazione 
+   (es. il paziente non si è davvero sottoposto ad alcuni dei test)
+   
+2. dipendeza lineare tra almeno una coppia di variabili pari a 1 in modulo. 
+   Provo a verificarlo.
+
+X è la matrice dei predittori continui (covariate)
+eseguo un corrplot
+
+```{r}
+
+#X <- dat_withoutOutcome %>%
+#  select_if(is.numeric)
+
+
+#corrplot::corrplot(cor(X,use="complete.obs"),type="upper")
+
+#describe(X)
+
+```
+
+
+```{r}
+#prova_2 <- mice(X,m = 1, maxit = 1,meth = 'cart',seed = 500)
+```
+
+In questo modo abbiamo imputato solo le numeriche
+
+```{r}
+#s2 <- complete(prova_2,1)
+#view(s2)
+#sapply(s2, function(x)(sum(is.na(x))))
+
+
+#which(is.na(s2$altezza_step1) == TRUE)
+#which(X$altezza != X$altezza_step1)
+```
+
+matrice di correlazione delle variabili numeriche con imputazione
+
+```{r}
+#corrX_imp <- cor(s2)
+```
+
+
+
+
+'''
+In effetti molte hanno perfetta correlazione. 
+Problema: l'algoritmo che mi permette di imputare va in errore a causa della singolarità della matrice
+          la funzione cor mi genera molti missing, presumo a causa degli NA presenti nel dataset. 
+          Quindi dovrei imputarli ma non posso per quanto detto prima. 
+
+Vorrei poter rimuovere i predittori linearmente dipendenti tra di loro, procedere con l'imputazione
+per poi eseguire stepwise, pca ecc...'''
+
+
+
+
+
+adesso vogliamo eliminare le variabili linearmente dipendenti 
+per poi continuare l'imputazione
+
+
+```{r}
+#which(corrX_imp == 1)
+```
+
+
+
+```{r}
+# for(i in 1:56){
+#   corrX_imp[i,i] = 0 
+# }
+
+```
+
+
+chiedere il threshold alla prof
+per adesso abbiamo verificato solo se esistesse perfetta correlazione tra le variabilie 
+
+```{r}
+
+#threshold <- 0.7
+
+# Trova tutte le coppie di variabili correlate
+#variabili_correlate <- which(abs(corrX_imp) == 1, arr.ind = TRUE)
+
+# Stampa le coppie di variabili correlate
+#print(variabili_correlate)
+
+```
+
+```{r}
+#str(dat_withoutOutcome)
+#str(s2)
+```
+
+
+vogliamo creare un dataset per utilizzare mice 
+
+```{r}
+#dat_withoutOutcome_imp <- merge(dat_withoutOutcome, s2, by = "id", all.x = TRUE)
+#dat_withoutOutcome_imp <- dat_withoutOutcome_imp %>%
+#  select(- ends_with('.x'))
+
+#str(dat_withoutOutcome_imp)
+
+
+```
+
+cancello ecocardio perche ha quasi il 25 % di missing
+
+```{r}
+
+#colSums(is.na(dat_withoutOutcome_imp))
+#prop.table(table(dat_withoutOutcome_imp$ecocardio, useNA = 'always'))
+#dat_withoutOutcome_imp <- dat_withoutOutcome_imp %>%
+#  select(-ecocardio)
+
+```
+
+
+
+imputiamo anche le variaibli non numeriche
+
+```{r}
+#prova_3 <- mice(dat_withoutOutcome_imp,m = 1, maxit = 1,meth = 'cart',seed = 500)
+```
+
+
+```{r}
+#dati_prova <- dat_withoutOutcome_imp %>%
+#  select(-c(birth_date,data))
+#prova_3 <- mice(dati_prova,m = 1, maxit = 1,meth = 'cart',seed = 500)
+
+```
+
+```{r}
+#s3 <- complete(prova_3,1)
+#colSums(is.na(s3))
+```
+
+
+RISOLTO!!!
+
+## Imputazione dei dati 
+
+PARTI DA QUA
+
+provo in un altro modo, togliamo ecocardio 
+
+```{r}
+dat_withoutOutcome <- dat_withoutOutcome %>%
+  select(-ecocardio)
+
+```
+
+tengo da una parte le variabili che creano problemi # risolto prima 
+
+```{r warning=FALSE}
+dati_prova2 <- dat_withoutOutcome %>%
+ select(-c(birth_date,data))
+#library(mice)
+
+
+```
+
+eseguo l'imputazione 
+
+```{r} 
+#prova <- mice(dati_prova2,m = 1, maxit = 1,meth = 'cart',seed = 500)
+```
+
+
+```{r}
+#dat_imp <- complete(prova,1)
+#colSums(is.na(dat_imp))
+```
+
+```{r warning=FALSE}
+s4 <- read_csv('dataset_imputato.csv')
+str(dat_imp)
+str(s4)
+```
+
+
+```{r}
+
+s4 <- s4 %>%
+   mutate(across(where(~all(. %in% c(0, 1))), as.factor))
+
+str(s4)
+```
+
+
+
+```{r}
+dat_finale <- merge(s4,dat_outcome,'id')
+#str(dat_finale)
+#colSums(is.na(dat_finale))
+
+```
+
+
+eliminiamo gli na della variabile outcome
+
+```{r}
+dat_finale <- dat_finale %>%
+  filter(!is.na(dat_finale$peso_outcome))
+```
+
+
+## EDA
+
+vediamo la variabile BMI
+
+```{r warning=FALSE}
+#library(plotly)
+boxplot(dat_finale$BMI)
+#ggplotly(b)
+```
+
+
+```{r}
+ggplot(dat_finale, aes(x = BMI,y = dm)) + 
+  geom_boxplot()
+
+```
+
+
+```{r}
+
+ggplot(dat_finale, aes(x = BMI,y = peso_outcome)) + 
+  geom_boxplot()
+```
+
+
+```{r warning=FALSE}
+library(plotly)
+d <- ggplot(dat_finale, aes(x = BMI, y = after_stat(count)/sum(after_stat(count)),col = peso_outcome)) + 
+  geom_density() +
+  theme_minimal()
+ggplotly(d)
+```
+
+## STEPWISE
+
+prepariamo il modello per il logit
+
+```{r}
+dat_logit <- dat_finale %>%
+  dplyr::select(-c(id,patient_key,step,sdo_code))
+```
+
+divido in train e test set
+
+```{r}
+round(prop.table(table(dat_logit$peso_outcome))*100)
+```
+
+
+```{r warning=FALSE}
+library(caret)
+set.seed(61616)
+u <- createDataPartition(dat_logit$peso_outcome , p = 0.8, times=10, list=TRUE)
+idx_train <- u[[1]]
+
+train_set <- dat_logit[idx_train , ]
+test_set <- dat_logit[-idx_train , ]
+
+```
+
+
+
+```{r}
+#prop.table(table(train_set$peso_outcome))
+#prop.table(table(test_set$peso_outcome))
+```
+
+
+```{r}
+
+mod.null <- glm(peso_outcome~1,data = train_set, family = binomial(link = 'logit'))
+mod.full <- glm(peso_outcome~., data = train_set, family = binomial(link = 'logit'))
+step.BIC <- step(mod.null, scope = list(lower = mod.null, upper = mod.full),
+                direction = "both", k = log(nrow(train_set)))
+
+```
+
+
+
+```{r}
+summary(step.BIC)
+```
+
+per ottenere gli odds 
+
+```{r}
+exp(coef(step.BIC))
+```
+
+
+Ricordiamo che odds varia tra [0, ∞], e se è maggiore di 1, vuole dire che pi > 1 − pi; se invece è minore di 1 ma maggiore di 0, allora, pi < 1 − pi.
+
+
+```{r}
+odd.ratio.logit <- DescTools::OddsRatio(step.BIC)
+
+
+```
+
+
+```{r}
+
+library(ggplot2)
+library(ggtext)
+# Sostituisci con il tuo oggetto odd.ratio.logit
+# Ad esempio, odd.ratio.logit <- DescTools::OddsRatio(logit)
+
+# Creazione del dataframe
+df_odd_ratio <- data.frame(
+  Category = rownames(odd.ratio.logit$or)[-1],
+  Odds_Ratio = as.numeric(odd.ratio.logit$or[,1][-1]),
+  Lower_CI = as.numeric(odd.ratio.logit$or[,2][-1]),
+  Upper_CI = as.numeric(odd.ratio.logit$or[,3][-1])
+)
+
+valori_specifici <- c(0.0, 0.5, 1.0, 1.5,2.0)
+#nuovi_labels_y <- c("Anno", "Centro", "Sud", "Giovani", "Adulti","Anziani","Femmine","Basso inquinamento",
+                    #"Ipertenzione","Consumo frequente di salumi","Attività sportiva")
+
+#etichetta_da_colorare <- c("Centro","Sud","Basso inquinamento")
+#colori_labels <- ifelse(nuovi_labels_y %in% etichetta_da_colorare, "##D5000F", "black")
+
+
+
+
+ggplot(df_odd_ratio, aes(x = Odds_Ratio, y = Category, xmin = Lower_CI, xmax = Upper_CI)) +
+  geom_point() +
+  geom_errorbar(width = 0.5, color = '#1F1F1F') +
+  labs(title = "") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1)) + 
+  scale_x_continuous(breaks = valori_specifici) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = '#D5000F') + 
+  xlab('Intervalli di confidenza') +
+  ylab('Variabili') +
+  coord_cartesian(xlim = c(min(valori_specifici), max(valori_specifici))) +
+  theme_minimal() 
+  
+
+```
+
+
+
+
+```{r warning=FALSE}
+library(DescTools)
+
+plot(OddsRatio(step.BIC), xlim=c(0, 2), main="OddsRatio - glm", pch=NA,
+lblcolor=hred, args.errbars=list(col=horange, pch=21, col.pch=hblue,
+bg.pch=hyellow, cex.pch=1.5))
+
+
+
+```
+
+
+```{r}
+ggplot(data = sum.effects) +
+geom_point(aes(AME,factor)) +
+geom_errorbar(aes(y = factor, xmin = lower, xmax = upper)) +
+theme_minimal() +
+theme(axis.text.y = element_text(angle = 0)) + 
+  geom_vline(xintercept = 0, color = 'red',linetype = 'dashed') 
+
+```
+
+
+```{r warning=FALSE}
+library(margins)
+effects <- margins(step.BIC) 
+sum.effects <- summary(effects)
+sum.effects
+
+```
+
+
+
+```{r}
+plot(effects)
+```
+
+
+
+```{r}
+ggplot(data = sum.effects) +
+geom_point(aes(AME,factor)) +
+geom_errorbar(aes(y = factor, xmin = lower, xmax = upper)) +
+theme_minimal() +
+theme(axis.text.y = element_text(angle = 0)) + 
+  geom_vline(xintercept = 0, color = 'red',linetype = 'dashed') 
+
+```
+
+
+Se l'effetto marginale medio è positivo, un aumento di una unità nella variabile indipendente è associato a un aumento medio dell'outcome.
+Se l'effetto marginale medio è negativo, un aumento di una unità nella variabile indipendente è associato a una diminuzione media dell'outcome.
+
+In questo caso vediamo direttamente alle probabilità
+
+
+
+```{r warning=FALSE}
+library(car)
+outlierTest(step.BIC)
+outlierTest(logit3)
+
+```
+
+
+il valore è maggiore del tipico livello di significatività del 5%. Di conseguenza, non ho sufficienti evidenze per affermare che ci siano outlier nei dati, considerando il livello di significatività comune.
+
+
+
+```{r}
+prob.outsample <- predict(step.BIC, type = "response", test_set) # posterior sul test set
+```
+
+classificatore Bayesiano
+
+```{r}
+pred_test <- ifelse(prob.outsample > 0.5,'1','0')
+table(pred = pred_test, true = test_set$peso_outcome)
+```
+
+
+
+```{r}
+cm <- confusionMatrix(as.factor(pred_test), test_set$peso_outcome,positive = '1')
+cm
+
+```
+
+il punto rosso è la posizione del classificatore bayesiano
+
+```{r warning=FALSE}
+library(ROCit)
+roc2 <- rocit(score = prob.outsample,  
+              class = test_set$peso_outcome)
+plot(roc2)
+points(1- cm$byClass[2],cm$byClass[1], pch = 21:25, col= 'red')
+```
+
+
+```{r warning=FALSE}
+library(pROC)
+roc_curve <- roc(test_set$peso_outcome,prob.outsample)
+optimal_point <- coords(roc_curve, "best")
+optimal_cutoff <- optimal_point$threshold
+
+```
+
+
+```{r}
+roc_curve$auc
+```
+
+
+
+```{r}
+pred_test2 <- ifelse(prob.outsample > optimal_cutoff,'1','0')
+table(pred = pred_test2, true = test_set$peso_outcome)
+```
+
+
+```{r}
+cm2 <- confusionMatrix(as.factor(pred_test2), test_set$peso_outcome,positive = '1')
+cm2
+
+```
+
+
+
+
+
+calcolo error rate sul test
+
+
+```{r}
+mean(pred_test != test_set$peso_outcome)
+```
+
+
+```{r}
+mean(pred_test_2 != test_set2$peso_outcome)
+```
+
+
+
+## PCA
+
+seleziono solo le covariate e le standardizziamo 
+
+```{r}
+X <- dat_logit %>%
+  select_if(is.numeric)
+
+X <- scale(X)
+
+dim(X)
+nrow(dat_logit)
+```
+
+```{r warning=FALSE}
+media_originale <- attr(X, "scaled:center")
+
+deviazione_standard_originale <- attr(X, "scaled:scale")
+```
+
+
+```{r}
+pc <- princomp(X)
+#pc$sdev
+#pc$scores #Z
+#pc$loadings #phi Q
+head(pc$scores)
+head(pc$loadings)
+
+```
+
+quanta variabilità spiegano le componenti
+
+```{r warning=FALSE}
+library(factoextra)
+eigen_value <- get_eigenvalue(pc)$eigenvalue
+```
+
+```{r}
+fviz_eig(pc, addlabels = TRUE, barfill = '#FA6559') 
+```
+
+
+
+
+
+
+```{r}
+u <- get_pca_var(pc)
+## i loadings
+head(u$coord)
+
+## contributo [%] della  varianza di ogni X all'interno di ogni PC
+# il 16% della variabilità è spiegata dalla prima componente
+# la seconda cattura la variabilità sulla variabile Urbanpop 
+u$contrib
+# il 16% è distribuito in questo modo 
+
+contributo_componenti <- as.data.frame(u$contrib)
+view(contributo_componenti)
+
+```
+
+
+
+```{r}
+head(cor(X, pc$scores))
+```
+
+
+```{r}
+fviz_pca_var(pc, axes = c(1,2)) + xlim(-0.5, 0.5) + ylim (-0.5, 0.5)
+# Supponiamo che vuoi visualizzare solo le variabili 1, 2 e 3
+variabili_di_interesse <- c('ffm_kg','harris_benedict')
+
+
+variabili_selezionate <- contributo_componenti[,1:2] >= 3
+variabili_selezionate <- contributo_componenti %>%
+  filter(Dim.1 >= 4 | Dim.2 >= 4)
+variabili_selezionate <- variabili_selezionate[,1:2]
+
+# Utilizza la funzione fviz_pca_var con il parametro select.var
+fviz_pca_var(pc, axes = c(1, 2), select.var = list(name = rownames(variabili_selezionate))) + xlim(-1 ,1) + ylim(-1, 1)
+
+colori_variabili <- rep("red", 15)
+
+
+contributo_componenti %>%
+  filter(Dim.1 >=4)
+
+contributo_componenti %>%
+  filter(Dim.2 >=4)
+```
+
+
+
+
+```{r}
+fviz_pca_ind(pc, axes = c(1, 2),col.ind = dat_logit$peso_outcome)
+```
+
+
+```{r}
+S <- cov(X)
+e <- eigen(S , symmetric = TRUE)
+l <- e$values # varianze degli Score, gli autovalori della matrice di var-cov
+L <- diag(l)
+Q <- e$vectors 
+
+
+dim(Q)
+
+```
+
+
+
+```{r}
+Z <- X %*% Q
+head(Z)
+head(pc$scores)
+```
+
+
+```{r}
+head(pc$loadings)
+head(Q)
+```
+
+
+## nuovo logit 
+
+```{r}
+library(caret)
+set.seed(61616)
+u <- createDataPartition(dat_logit$peso_outcome , p = 0.8, times=10, list=TRUE)
+idx_train <- u[[1]]
+
+train_set <- dat_logit[idx_train , ]
+test_set <- dat_logit[-idx_train , ]
+
+```
+
+
+creo il dataset con le variabili selezionati con le PCA 
+
+```{r}
+
+dat_logit2 <- dat_logit %>%
+  select(peso_outcome,ffm_kg, harris_benedict, massa_musc_kg,
+                acqua_intra ,peso, altezza , circ_vita ,
+                acqua_extra , BMI , circ_fian , fm_perc ,
+                ffm_perc , massa_musc_perc , rapporto_vita_alt ,
+                leuco , linfociti_val , neutrofili_val , monociti_val ,
+                piastr , col_tot , emo_gli , creatin ,
+                glic_bas , LDL , eta , emo , AST ,
+                ALT , gammaGT , vol_glob , trigl , ematocr ,
+                freq_card)
+
+str(dat_logit2)
+X2 <- dat_logit2 %>%
+  select(-peso_outcome)
+
+
+```
+
+
+```{r}
+cor(X2)
+```
+
+
+```{r}
+corrplot::corrplot(cor(X2,use="complete.obs"),type="upper")
+```
+seleziono solo le variabili non correlate 
+
+```{r}
+
+matrice_correlazione <- cor(X2)
+
+# Imposta la soglia di correlazione desiderata
+soglia_correlazione <- 0.7  # Puoi modificare questo valore in base alle tue esigenze
+
+# Trova le coppie di variabili correlate
+variabili_correlate <- which(abs(matrice_correlazione) > soglia_correlazione & abs(matrice_correlazione) < 1, arr.ind = TRUE)
+
+# Mostra le coppie di variabili correlate
+variabili_correlate
+
+```
+
+
+## secondo caso 
+
+
+```{r}
+X4 <- X2 %>%
+  select(peso,massa_musc_kg, altezza, circ_fian, fm_perc, rapporto_vita_alt, neutrofili_val, linfociti_val, monociti_val, piastr, col_tot, emo_gli, creatin, eta, emo,ALT, gammaGT, vol_glob, trigl, freq_card)
+
+dim(X4)
+
+```
+
+
+```{r}
+matrice_correlazione <- cor(X4)
+corrplot(cor(X4,use="complete.obs"),type = 'upper') 
+```
+
+
+```{r}
+X4 <- X4 %>%
+  mutate(peso_outcome = dat_logit2$peso_outcome)
+```
+
+
+```{r}
+
+set.seed(61616)
+u <- caret::createDataPartition(X4$peso_outcome , p = 0.8, times=10, list=TRUE)
+idx_train2 <- u[[1]]
+
+train_set2 <- X4[idx_train2 , ]
+test_set2 <- X4[-idx_train2 , ]
+
+```
+
+
+```{r}
+
+logit3 <- glm(peso_outcome~., family = binomial(link='logit'), data =  train_set2)
+
+summary(logit3)
+
+```
+
+
+
+# Bontà di adattamento
+
+
+```{r}
+PseudoR2(step.BIC, c("Efron", "McFadden", "Nagel", "CoxSnell"))
+PseudoR2(logit3, c("Efron", "McFadden", "Nagel", "CoxSnell"))
+step.BIC$aic
+logit3$aic
+
+
+```
+
+
+Aic e bic 
+
+```{r}
+l_logit <- logLik(step.BIC)
+k <- 7
+n <- nrow(train_set)
+AIC <- -2*l_logit + 2*k
+BIC <- -2*l_logit + k* log(n)
+cbind(AIC,BIC)
+
+l2_logit <- logLik(logit3)
+k <- 21
+n <- nrow(train_set2)
+AIC2 <- -2*l2_logit + 2*k
+BIC2 <- -2*l2_logit + k* log(n)
+cbind(AIC2,BIC2)
+```
+
+
+```{r}
+prob.outsample1 <- predict(step.BIC, type = "response", test_set) # posterior sul test set
+```
+ 
+
+calcolo il punto rosso per il classificatore bayesiano 
+
+
+```{r}
+pred_test_bayes <- ifelse(prob.outsample1 > 0.5,1,0)
+cm_bayes <- confusionMatrix(as.factor(pred_test_bayes), test_set$peso_outcome,positive = '1')
+
+```
+
+
+
+```{r}
+roc1 <- rocit(score = prob.outsample1,  
+              class = test_set$peso_outcome)
+plot(roc1)
+points(1- cm_bayes$byClass[2],cm_bayes$byClass[1], pch = 21:25, col= 'red',bg = 'red')
+```
+ 
+ 
+```{r}
+roc_curve1  <- roc(test_set$peso_outcome,prob.outsample1)
+plot(roc_curve1)
+optimal_point1 <- coords(roc_curve1, "best")
+optimal_cutoff1 <- optimal_point1$threshold
+optimal_cutoff1
+```
+
+vero cutoff 
+
+```{r}
+pred_test_1 <- ifelse(prob.outsample1 > optimal_cutoff1 ,1,0)
+cm_1 <- confusionMatrix(as.factor(pred_test_1), test_set$peso_outcome,positive = '1')
+cm_1
+
+```
+
+
+
+```{r}
+roc1 <- rocit(score = prob.outsample1,  
+              class = test_set$peso_outcome)
+plot(roc1)
+points(1- cm_bayes$byClass[2],cm_bayes$byClass[1], pch = 21:25, col= 'red',bg = 'red')
+
+```
+
+PCA validazione
+
+```{r}
+prob.outsample2 <- predict(logit3, type = "response", test_set2) # posterior sul test set
+```
+ 
+
+calcolo il punto rosso per il classificatore bayesiano 
+
+```{r}
+pred_test_bayes2 <- ifelse(prob.outsample2 > 0.5,1,0)
+cm_bayes2 <- confusionMatrix(as.factor(pred_test_bayes2), test_set2$peso_outcome,positive = '1')
+
+```
+
+
+```{r}
+roc2 <- rocit(score = prob.outsample2,  
+              class = test_set2$peso_outcome)
+plot(roc2)
+points(1- cm_bayes2$byClass[2],cm_bayes2$byClass[1], pch = 21:25, col= 'red',bg = 'red')
+```
+ 
+
+```{r}
+roc_curve2  <- roc(test_set2$peso_outcome,prob.outsample2)
+plot(roc_curve2)
+optimal_point2 <- coords(roc_curve2, "best")
+optimal_cutoff2 <- optimal_point2$threshold
+optimal_cutoff2
+```
+
+vero cutoff 
+
+```{r}
+pred_test_2 <- ifelse(prob.outsample2 > optimal_cutoff2 ,1,0)
+cm_2<- confusionMatrix(as.factor(pred_test_2), test_set2$peso_outcome,positive = '1')
+cm_2
+
+```
+
+```{r}
+roc_curve1$auc
+roc_curve2$auc
+```
+
+
+```{r}
+optimal_cutoff1
+optimal_cutoff2
+```
+
+
+```{r}
+mean(test_set2$peso_outcome != pred_test_2 )
+mean(test_set$peso_outcome != pred_test_1 )
+```
+
+
+
+## EDA
+
+
+```{r}
+# Calcolare il 75° percentile
+percentile_75 <- quantile(X2$BMI, 0.75)
+
+# Creare la condizione per gli outliers (punti oltre il 75° percentile)
+outliers_condition <- X2$BMI > 60
+
+# Creare il grafico
+ggplot(X2, aes(x = BMI)) +
+  geom_boxplot() +
+  geom_point(data = X2[outliers_condition, ], aes(y = BMI), color = "red") +
+  theme_minimal()
+
+# Calcolare il 75° percentile
+
+# Creare il grafico con colorazione degli outliers
+
+ggplot(X2, aes(x = BMI)) +
+  geom_boxplot(outlier.colour = "#D5000F") +
+  theme_minimal()
+
+
+```
+
+
+
+```{r}
+ggplot(X2,aes(x = BMI , y= ..count../sum(..count..))) +
+  geom_histogram(col = 'white', fill = '#FA6559',binwidth = 2) +
+  ylab('densità ')+ 
+  theme_minimal() +
+  geom_vline(xintercept = 60, linetype = "dashed", color = "#1F1F1F") +
+  ylab('Densità') +
+  theme_minimal()
+
+
+
+ggplot(X2, aes(x = BMI, y = ..count../sum(..count..))) +
+  geom_density(col = '#FA6559', fill = '#FA6559', alpha = 0.5) +
+  geom_vline(xintercept = 60, linetype = "dashed", color = "#1F1F1F") +
+  xlab('BMI') +
+  ylab('Densità') +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+str(dat_logit)
+```
+
+```{r}
+ggplot(dat_logit, aes(x = dm, y  =  ..count../sum(..count..)*100)) +
+  geom_bar(fill = "#FA6559") + 
+  labs(y = 'Frequenza percentuale ',
+       x = 'Diabetici') +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(dat_logit, aes(x = gender, y  =  ..count../sum(..count..)*100)) +
+  geom_bar(fill = "#FA6559") + 
+  labs(y = 'Frequenza percentuale ',
+       x = 'Genere') +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(dat_logit,aes(x = eta , y= ..count../sum(..count..))) +
+  geom_histogram(col = 'white', fill = '#FA6559',binwidth = 2) +
+  ylab('densità ')+ 
+  theme_minimal() +
+  ylab('Densità') +
+  theme_minimal()
+
+summary(dat_logit$eta)
+
+```
+
+
+```{r}
+dat_eda <- dat_logit
+dat_eda$eta2 <- ifelse(dat_eda$eta < 18,1,ifelse(dat_eda$eta> 18 & dat_eda$eta <= 50,2,
+                                                 ifelse(dat_eda$eta > 50 & dat_eda$eta <= 70,3,4)))
+table(dat_eda$eta2)
+
+# Definisci le etichette
+etichette_eta2 <- c("0-17", "18-50", "51-70", "71+")
+
+# Applica le etichette al dataframe
+dat_eda$eta2 <- factor(dat_eda$eta2, levels = 1:4, labels = etichette_eta2)
+
+ggplot(dat_eda, aes(x = eta2, y  =  ..count../sum(..count..)*100)) +
+  geom_bar(fill = "#FA6559") + 
+  labs(y = 'Frequenza percentuale ',
+       x = 'Età') +
+  theme_minimal()
+```
+
+
+
+
+
+```{r}
+summary(dat_logit$BMI)
+```
+
+
