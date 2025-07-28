@@ -11,19 +11,19 @@ I progetti trattano tematiche statistiche e applicazioni in ambito sanitario, ec
 
 ### 1. Analisi Statistica del Diabete Mellito
 Tesi triennale basata su un dataset del CDC (BRFSS), focalizzata sull’identificazione dei principali fattori associati all’insorgenza del diabete, mediante modelli di regressione binaria.  
-📄 [Leggi il README](./tesi-diabete/README.md)
+📄 [Leggi il README](./tesi_triennale/README.md)
 
 ---
 
 ### 2. Confronto tra Stepwise e PCA nella Predizione della Perdita di Peso  
 Progetto del corso di Laboratorio R (laurea magistrale): confronto tra metodi di selezione automatica (Stepwise) e riduzione dimensionale (PCA) su un dataset clinico ad alta dimensionalità.  
-📄 [Leggi il README](./stepwise-vs-pca/README.md)
+📄 [Leggi il README](./lab_stat2/README.md)
 
 ---
 
 ### 3. Analisi del PIL Britannico – Serie Storiche e Modelli Previsivi  
 Progetto finale basato sull’analisi del Prodotto Interno Lordo britannico dal 1998 al 2022. Comprende pulizia della serie, studio della stagionalità, modelli ARIMA, e valutazione dell’accuratezza predittiva.  
-📄 [Leggi il README](./pil-uk-forecast/README.md)
+📄 [Leggi il README](./lab_stat/README.md)
 
 ---
 
